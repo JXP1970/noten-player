@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Posaunenchor Noten-Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.6/build/opensheetmusicdisplay.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #16213e;
+      border-bottom: 2px solid #0f3460;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      color: #e94560;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .load-btn {
+      background: #0f3460;
+      border: 1px solid #e94560;
+      color: #e0e0e0;
+      padding: 7px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    .load-btn:hover { background: #e94560; }
+
+    #file-input { display: none; }
+
+    .filename {
+      font-size: 0.85rem;
+      color: #888;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Transport */
+    .transport {
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .play-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #e94560;
+      border: none;
+      cursor: pointer;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s, background 0.2s;
+      flex-shrink: 0;
+    }
+    .play-btn:hover { transform: scale(1.05); background: #c73652; }
+    .play-btn:disabled { background: #555; cursor: default; transform: none; }
+
+    .stop-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      background: #0f3460;
+      border: 1px solid #555;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .stop-btn:hover { background: #555; }
+    .stop-btn:disabled { opacity: 0.4; cursor: default; }
+
+    .tempo-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .tempo-group label { color: #aaa; }
+    #tempo-slider {
+      width: 100px;
+      accent-color: #e94560;
+    }
+    #tempo-display {
+      min-width: 44px;
+      text-align: right;
+      font-weight: 600;
+      color: #e94560;
+    }
+
+    /* Voice controls */
+    .voices {
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      padding: 10px 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .voice-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 2px solid;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .voice-btn .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .voice-btn[data-voice="S"] { border-color: #ff6b9d; color: #ff6b9d; }
+    .voice-btn[data-voice="A"] { border-color: #ffa07a; color: #ffa07a; }
+    .voice-btn[data-voice="T"] { border-color: #7ec8e3; color: #7ec8e3; }
+    .voice-btn[data-voice="B"] { border-color: #98d982; color: #98d982; }
+
+    .voice-btn[data-voice="S"] .dot { background: #ff6b9d; }
+    .voice-btn[data-voice="A"] .dot { background: #ffa07a; }
+    .voice-btn[data-voice="T"] .dot { background: #7ec8e3; }
+    .voice-btn[data-voice="B"] .dot { background: #98d982; }
+
+    .voice-btn.muted {
+      opacity: 0.35;
+    }
+    .voice-btn.solo {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .voice-label-text { pointer-events: none; }
+
+    /* Volume sliders per voice */
+    .voice-volume {
+      width: 60px;
+      accent-color: inherit;
+    }
+
+    /* Score container */
+    #score-container {
+      background: white;
+      min-height: 400px;
+      margin: 0;
+      overflow-y: auto;
+    }
+
+    #osmd-canvas {
+      padding: 20px;
+    }
+
+    /* Empty state */
+    #empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      color: #555;
+      gap: 16px;
+      background: #1a1a2e;
+    }
+
+    #empty-state .icon { font-size: 3rem; }
+    #empty-state p { font-size: 1rem; text-align: center; line-height: 1.6; }
+    #empty-state .hint { font-size: 0.85rem; color: #444; }
+
+    /* Status bar */
+    #status-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #0f3460;
+      padding: 4px 16px;
+      font-size: 0.8rem;
+      color: #aaa;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Cursor highlight — injected by OSMD */
+    .osmd-cursor { opacity: 0.5; }
+
+    /* Loading overlay */
+    #loading {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      font-size: 1.2rem;
+      color: #e94560;
+    }
+    #loading.active { display: flex; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎼 Noten-Player</h1>
+  <button class="load-btn" onclick="document.getElementById('file-input').click()">
+    📂 MusicXML laden
+  </button>
+  <input type="file" id="file-input" accept=".xml,.musicxml,.mxl" onchange="loadFile(event)">
+  <span class="filename" id="filename">Keine Datei geladen</span>
+</header>
+
+<div class="transport">
+  <button class="play-btn" id="play-btn" onclick="togglePlay()" disabled title="Abspielen / Pause">▶</button>
+  <button class="stop-btn" id="stop-btn" onclick="stopPlayback()" disabled title="Stop">⏹</button>
+
+  <div class="tempo-group">
+    <label>Tempo</label>
+    <input type="range" id="tempo-slider" min="40" max="200" value="80" oninput="updateTempo(this.value)">
+    <span id="tempo-display">80 BPM</span>
+  </div>
+
+  <div class="tempo-group" style="margin-left:8px">
+    <label>Lautstärke</label>
+    <input type="range" id="master-vol" min="-30" max="0" value="-6" style="width:80px;accent-color:#e94560"
+           oninput="updateMasterVol(this.value)">
+  </div>
+</div>
+
+<div class="voices" id="voice-controls">
+  <button class="voice-btn" data-voice="S" onclick="toggleVoice(this)" title="Sopran">
+    <span class="dot"></span><span class="voice-label-text">Sopran</span>
+  </button>
+  <button class="voice-btn" data-voice="A" onclick="toggleVoice(this)" title="Alt">
+    <span class="dot"></span><span class="voice-label-text">Alt</span>
+  </button>
+  <button class="voice-btn" data-voice="T" onclick="toggleVoice(this)" title="Tenor">
+    <span class="dot"></span><span class="voice-label-text">Tenor</span>
+  </button>
+  <button class="voice-btn" data-voice="B" onclick="toggleVoice(this)" title="Bass">
+    <span class="dot"></span><span class="voice-label-text">Bass</span>
+  </button>
+  <span style="color:#666;font-size:0.8rem;align-self:center;margin-left:4px">
+    Klick = stumm | Doppelklick = Solo
+  </span>
+</div>
+
+<div id="score-container">
+  <div id="empty-state">
+    <div class="icon">🎵</div>
+    <p>Lade eine <strong>MusicXML-Datei</strong> (.xml, .musicxml)<br>um den Chorsatz anzuzeigen und abzuspielen.</p>
+    <p class="hint">Tipp: MusicXML aus Audiveris, MuseScore, Sibelius oder Finale exportieren.</p>
+  </div>
+  <div id="osmd-canvas" style="display:none"></div>
+</div>
+
+<div id="status-bar">
+  <span id="status-text">Bereit</span>
+  <span id="position-display"></span>
+</div>
+
+<div id="loading">Lade Noten …</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let osmd = null;
+let isPlaying = false;
+let playOffset = 0;       // where we paused (in seconds)
+let totalDuration = 0;
+
+const mutedVoices = new Set();   // voice indices that are muted
+let soloVoice = null;            // null = no solo
+
+// Tone.js synths — one per voice (S, A, T, B)
+const synthOptions = {
+  oscillator: { type: 'triangle' },
+  envelope: { attack: 0.02, decay: 0.1, sustain: 0.7, release: 0.4 }
+};
+
+let synths = [];
+let voiceVols = [];      // per-voice Tone.Volume nodes for live mute/solo
+let masterVol;
+
+// ── Init Tone.js ───────────────────────────────────────────────────────────
+function initAudio() {
+  if (synths.length) return;
+  const masterStart = parseFloat(document.getElementById('master-vol').value);
+  masterVol = new Tone.Volume(masterStart).toDestination();
+  for (let i = 0; i < 4; i++) {
+    const vv = new Tone.Volume(0).connect(masterVol);
+    const synth = new Tone.PolySynth(Tone.Synth, synthOptions).connect(vv);
+    voiceVols.push(vv);
+    synths.push(synth);
+  }
+  applyVoiceStates();
+  setStatus('Audio bereit');
+}
+
+// Mute/unmute each voice's volume node based on current mute/solo state.
+function applyVoiceStates() {
+  voiceVols.forEach((vv, i) => {
+    if (vv) vv.mute = !isVoiceActive(i);
+  });
+}
+
+// ── File loading ───────────────────────────────────────────────────────────
+async function loadFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  document.getElementById('filename').textContent = file.name;
+  showLoading(true);
+  stopPlayback();
+
+  try {
+    const isMxl = file.name.toLowerCase().endsWith('.mxl');
+    const content = isMxl ? await readBinaryString(file) : await file.text();
+    await renderScore(content);
+    setStatus(`${file.name} geladen`);
+  } catch(e) {
+    setStatus('Fehler beim Laden: ' + e.message);
+    console.error(e);
+  } finally {
+    showLoading(false);
+  }
+}
+
+function readBinaryString(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsBinaryString(file);
+  });
+}
+
+async function renderScore(xmlText) {
+  document.getElementById('empty-state').style.display = 'none';
+  const canvas = document.getElementById('osmd-canvas');
+  canvas.style.display = 'block';
+  canvas.innerHTML = '';
+
+  osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd-canvas', {
+    autoResize: true,
+    backend: 'svg',
+    drawTitle: true,
+    drawSubtitle: true,
+    drawComposer: true,
+    drawCredits: true,
+    followCursor: true,
+    cursorsOptions: [{ type: 0, color: '#e94560', alpha: 0.5, follow: true }],
+  });
+
+  await osmd.load(xmlText);
+  osmd.render();
+
+  // Enable cursor
+  osmd.cursor.show();
+
+  // Build playback data
+  buildPlaybackData();
+
+  document.getElementById('play-btn').disabled = false;
+  document.getElementById('stop-btn').disabled = false;
+}
+
+// ── Playback data extraction ───────────────────────────────────────────────
+let noteEvents = [];  // [{time, duration, pitch, voiceIndex, noteObj}]
+
+let cursorSteps = [];  // [{time, step}] for visual cursor tracking
+
+function buildPlaybackData() {
+  if (!osmd) return;
+  noteEvents = [];
+  cursorSteps = [];
+  initAudio();
+
+  const bpm = parseInt(document.getElementById('tempo-slider').value);
+
+  // Walk the score via the cursor iterator. At each step it exposes the
+  // voice entries sounding at that timestamp. We map each distinct
+  // (staff, voice) track to a voice index 0..3 (S,A,T,B) in order of
+  // first appearance.
+  const trackMap = new Map();
+  osmd.cursor.reset();
+  const it = osmd.cursor.Iterator;
+  let step = 0;
+
+  while (!it.EndReached) {
+    const ts = it.CurrentSourceTimestamp?.RealValue ?? 0;   // in whole notes
+    const time = wholeToSeconds(ts, bpm);
+    cursorSteps.push({ time, step });
+
+    const voiceEntries = it.CurrentVoiceEntries;
+    if (voiceEntries) {
+      voiceEntries.forEach((ve) => {
+        const vi = trackIndex(ve, trackMap);
+        ve.Notes?.forEach((note) => {
+          if (isRest(note)) return;
+          const freq = noteToFrequency(note);
+          if (!freq) return;
+
+          // Tie handling: a tied note is one sustained sound. Only trigger
+          // the start note (with the summed duration of the whole tie) and
+          // skip the continuation notes so they don't get re-attacked —
+          // this is what made tied notes across barlines sound wrong.
+          let lenWhole = note.Length?.RealValue ?? 0;
+          const tie = note.NoteTie;
+          if (tie) {
+            if (tie.StartNote !== note) return;            // continuation → skip
+            lenWhole = tie.Duration?.RealValue ?? lenWhole; // start → full length
+          }
+
+          const durSecs = wholeToSeconds(lenWhole, bpm);
+          if (durSecs <= 0) return;
+          noteEvents.push({
+            time,
+            duration: durSecs * 0.92,
+            pitch: freq,
+            voiceIndex: vi
+          });
+        });
+      });
+    }
+
+    osmd.cursor.next();
+    step++;
+  }
+
+  osmd.cursor.reset();
+  osmd.cursor.hide();
+
+  if (noteEvents.length) {
+    totalDuration = Math.max(...noteEvents.map(e => e.time + e.duration));
+  } else {
+    totalDuration = 0;
+  }
+}
+
+// Map a voice entry to a stable voice index 0..3 (S,A,T,B).
+//
+// Layout assumption (typical 2-staff SATB):
+//   staff 0 (treble): 1st voice = Sopran (0), further voices = Alt (1)
+//   staff 1 (bass):   1st voice = Tenor  (2), further voices = Bass (3)
+//
+// Per staff, voices are numbered in order of first appearance, so OCR
+// artefact voices (a spurious 3rd/4th voice on a staff) fold into Alt/Bass
+// instead of stealing a separate button. trackMap holds, per staff, a
+// Map<voiceId, localIndex>.
+function trackIndex(ve, trackMap) {
+  let staffId = 0, voiceId = 0;
+  try {
+    staffId = ve.ParentSourceStaffEntry?.ParentStaff?.idInMusicSheet ?? 0;
+    voiceId = ve.ParentVoice?.VoiceId ?? 0;
+  } catch(e) {}
+
+  const staff = Math.min(staffId, 1);            // only 2 staves matter
+  if (!trackMap.has(staff)) trackMap.set(staff, new Map());
+  const voicesOnStaff = trackMap.get(staff);
+  if (!voicesOnStaff.has(voiceId)) voicesOnStaff.set(voiceId, voicesOnStaff.size);
+  const local = Math.min(voicesOnStaff.get(voiceId), 1);  // 0 or 1 within staff
+
+  return staff * 2 + local;                       // 0=S,1=A,2=T,3=B
+}
+
+// OSMD RealValue is measured in whole notes (1.0 = whole = 4 beats).
+function wholeToSeconds(wholeNotes, bpm) {
+  return wholeNotes * 4 * (60 / bpm);
+}
+
+function isRest(note) {
+  try { return note.isRest(); } catch(e) { return !note.Pitch; }
+}
+
+function noteToFrequency(note) {
+  try {
+    const pitch = note.Pitch;
+    if (!pitch) return null;
+    // OSMD computes the frequency directly from the pitch — most reliable.
+    const f = pitch.Frequency;
+    return (typeof f === 'number' && f > 0) ? f : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+// ── Playback control ───────────────────────────────────────────────────────
+async function togglePlay() {
+  if (!osmd) return;
+  await Tone.start();
+
+  if (isPlaying) {
+    pausePlayback();
+  } else {
+    startPlayback();
+  }
+}
+
+function startPlayback() {
+  if (!noteEvents.length) {
+    buildPlaybackData();
+  }
+  if (!noteEvents.length) return;
+
+  isPlaying = true;
+  document.getElementById('play-btn').textContent = '⏸';
+
+  // Schedule every note on the Transport timeline. ev.time is seconds from
+  // the start of the piece — i.e. Transport time. The callback receives the
+  // exact audio time to play the note at.
+  Tone.Transport.cancel();
+  noteEvents.forEach(ev => {
+    Tone.Transport.schedule((time) => {
+      try { synths[ev.voiceIndex]?.triggerAttackRelease(ev.pitch, ev.duration, time); } catch(e) {}
+    }, ev.time);
+  });
+
+  // Auto-stop shortly after the last note ends.
+  Tone.Transport.scheduleOnce(() => { stopPlayback(); }, totalDuration + 0.3);
+
+  // Resume from where we paused. Setting seconds forward makes the Transport
+  // skip past earlier scheduled events automatically.
+  Tone.Transport.seconds = playOffset;
+  Tone.Transport.start();
+
+  osmd.cursor.show();
+  animateCursor();
+}
+
+function animateCursor() {
+  let lastStep = -1;
+  function frame() {
+    if (!isPlaying) return;
+    const elapsed = Tone.Transport.seconds;
+    document.getElementById('position-display').textContent =
+      formatTime(elapsed) + ' / ' + formatTime(totalDuration);
+
+    // Find current cursor step
+    let stepIdx = 0;
+    for (let i = 0; i < cursorSteps.length; i++) {
+      if (cursorSteps[i].time <= elapsed + 1e-4) stepIdx = i;
+      else break;
+    }
+
+    if (stepIdx !== lastStep) {
+      if (stepIdx > lastStep && lastStep >= 0) {
+        for (let i = lastStep; i < stepIdx; i++) osmd.cursor.next();
+      } else {
+        osmd.cursor.reset();
+        for (let i = 0; i < stepIdx; i++) osmd.cursor.next();
+      }
+      lastStep = stepIdx;
+    }
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function pausePlayback() {
+  isPlaying = false;
+  Tone.Transport.pause();
+  playOffset = Math.max(0, Math.min(Tone.Transport.seconds, totalDuration));
+  document.getElementById('play-btn').textContent = '▶';
+  releaseAllSynths();
+}
+
+function stopPlayback() {
+  isPlaying = false;
+  Tone.Transport.stop();
+  Tone.Transport.cancel();
+  Tone.Transport.seconds = 0;
+  playOffset = 0;
+  document.getElementById('play-btn').textContent = '▶';
+  releaseAllSynths();
+  document.getElementById('position-display').textContent = '';
+  if (osmd) {
+    osmd.cursor.reset();
+    osmd.cursor.hide();
+  }
+}
+
+function releaseAllSynths() {
+  synths.forEach(s => { try { s.releaseAll(); } catch(e) {} });
+}
+
+// ── Voice toggles ──────────────────────────────────────────────────────────
+const voiceMap = { S: 0, A: 1, T: 2, B: 3 };
+let lastClickTime = {};
+
+function toggleVoice(btn) {
+  const voice = btn.dataset.voice;
+  const vi = voiceMap[voice];
+  const now = Date.now();
+  const isDouble = (now - (lastClickTime[voice] || 0)) < 400;
+  lastClickTime[voice] = now;
+
+  if (isDouble) {
+    // Double-click = solo toggle
+    if (soloVoice === vi) {
+      soloVoice = null;
+      document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('solo','muted'));
+    } else {
+      soloVoice = vi;
+      document.querySelectorAll('.voice-btn').forEach(b => {
+        const bvi = voiceMap[b.dataset.voice];
+        b.classList.toggle('solo', bvi === vi);
+        b.classList.toggle('muted', bvi !== vi);
+      });
+    }
+  } else {
+    // Single click = mute toggle (only if no solo active)
+    if (soloVoice !== null) return;
+    if (mutedVoices.has(vi)) {
+      mutedVoices.delete(vi);
+      btn.classList.remove('muted');
+    } else {
+      mutedVoices.add(vi);
+      btn.classList.add('muted');
+    }
+  }
+
+  applyVoiceStates();
+}
+
+function isVoiceActive(vi) {
+  if (soloVoice !== null) return vi === soloVoice;
+  return !mutedVoices.has(vi);
+}
+
+// ── Tempo ──────────────────────────────────────────────────────────────────
+function updateTempo(val) {
+  document.getElementById('tempo-display').textContent = val + ' BPM';
+  if (osmd) {
+    const wasPlaying = isPlaying;
+    if (wasPlaying) pausePlayback();
+    buildPlaybackData();
+    if (wasPlaying) startPlayback();
+  }
+}
+
+function updateMasterVol(val) {
+  if (masterVol) masterVol.volume.value = parseFloat(val);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+function showLoading(show) {
+  document.getElementById('loading').classList.toggle('active', show);
+}
+
+function formatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60).toString().padStart(2,'0');
+  return `${m}:${s}`;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && osmd) {
+    e.preventDefault();
+    togglePlay();
+  }
+  if (e.code === 'Escape') stopPlayback();
+});
+
+setStatus('Bereit — lade eine MusicXML-Datei');
+</script>
+</body>
+</html>
