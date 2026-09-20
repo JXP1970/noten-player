@@ -387,12 +387,19 @@ async function quickLoadFile(filename) {
     const response = await fetch(filename);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binaryString = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binaryString += String.fromCharCode(bytes[i]);
+    const isMxl = filename.toLowerCase().endsWith('.mxl');
+
+    let content;
+    if (isMxl) {
+      // For MXL: convert to BinaryString (same as FileReader.readAsBinaryString)
+      content = arrayBufferToBinaryString(arrayBuffer);
+    } else {
+      // For XML: convert to text
+      const decoder = new TextDecoder('utf-8');
+      content = decoder.decode(new Uint8Array(arrayBuffer));
     }
-    await renderScore(binaryString);
+
+    await renderScore(content);
     setStatus(`${filename} geladen`);
   } catch(e) {
     setStatus('Fehler beim Laden: ' + e.message);
@@ -400,6 +407,16 @@ async function quickLoadFile(filename) {
   } finally {
     showLoading(false);
   }
+}
+
+function arrayBufferToBinaryString(arrayBuffer) {
+  // Convert ArrayBuffer to binary string (same as FileReader.readAsBinaryString)
+  const bytes = new Uint8Array(arrayBuffer);
+  let binaryString = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binaryString += String.fromCharCode(bytes[i]);
+  }
+  return binaryString;
 }
 
 function readBinaryString(file) {
@@ -411,7 +428,7 @@ function readBinaryString(file) {
   });
 }
 
-async function renderScore(xmlText) {
+async function renderScore(content) {
   document.getElementById('empty-state').style.display = 'none';
   const canvas = document.getElementById('osmd-canvas');
   canvas.style.display = 'block';
@@ -428,7 +445,8 @@ async function renderScore(xmlText) {
     cursorsOptions: [{ type: 0, color: '#e94560', alpha: 0.5, follow: true }],
   });
 
-  await osmd.load(xmlText);
+  // OSMD.load accepts: string (XML), ArrayBuffer, Blob, or Uint8Array (MXL)
+  await osmd.load(content);
   osmd.render();
 
   // Enable cursor
