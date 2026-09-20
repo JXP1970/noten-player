@@ -45,6 +45,18 @@
     }
     .load-btn:hover { background: #e94560; }
 
+    .quick-load-btn {
+      background: #0f3460;
+      border: 1px solid #7ec8e3;
+      color: #7ec8e3;
+      padding: 7px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      margin-left: 8px;
+    }
+    .quick-load-btn:hover { background: #7ec8e3; color: #0f3460; }
+
     #file-input { display: none; }
 
     .filename {
@@ -240,6 +252,12 @@
   <button class="load-btn" onclick="document.getElementById('file-input').click()">
     📂 MusicXML laden
   </button>
+  <button class="quick-load-btn" onclick="quickLoadFile('Musik was my first love.mvt1.mxl')" title="Schnell-Laden: Musik war meine erste Liebe">
+    🚀 1. Satz
+  </button>
+  <button class="quick-load-btn" onclick="quickLoadFile('Musik was my first love.mvt2.mxl')" title="Schnell-Laden: Musik war meine erste Liebe (Satz 2)">
+    🚀 2. Satz
+  </button>
   <input type="file" id="file-input" accept=".xml,.musicxml,.mxl" onchange="loadFile(event)">
   <span class="filename" id="filename">Keine Datei geladen</span>
 </header>
@@ -354,6 +372,31 @@ async function loadFile(event) {
   } catch(e) {
     setStatus('Fehler beim Laden: ' + e.message);
     console.error(e);
+  } finally {
+    showLoading(false);
+  }
+}
+
+// Quick load from URL/filename
+async function quickLoadFile(filename) {
+  document.getElementById('filename').textContent = filename;
+  showLoading(true);
+  stopPlayback();
+
+  try {
+    const response = await fetch(filename);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binaryString = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binaryString += String.fromCharCode(bytes[i]);
+    }
+    await renderScore(binaryString);
+    setStatus(`${filename} geladen`);
+  } catch(e) {
+    setStatus('Fehler beim Laden: ' + e.message);
+    console.error('quickLoadFile error:', e);
   } finally {
     showLoading(false);
   }
